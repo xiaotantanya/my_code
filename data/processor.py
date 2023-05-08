@@ -226,6 +226,25 @@ class ESLProcessor(DataProcessor):
                                           ,relation_dict[(x,y)]["relation"],relation_dict[(y,z)]["relation"],relation_dict[(x,z)]["relation"]))
         
 
+def convert_data_to_feature_for_bart(examples,max_seq_length,tokenizer,args,rel2id):
+    """Loads a data file into a list of 'InputBatch's."""
+
+    print("loadding")
+    for (ex_index,example) in enumerate(examples):
+        
+
+        tokens = []
+        SUBJECT_START = "[subject_start]"
+        SUBJECT_END = "[subject_end]"
+        OBJECT_START = "[object_start]"
+        OBJECT_END = "[object_end]"
+
+    
+def get_dataset():
+    pass
+
+processors = {"ESL":ESLProcessor}
+
 if __name__ == "__main__":
     processor = ESLProcessor(True,0.1,"./dataset/EventStoryLine/")
     processor.get_train_examples()
