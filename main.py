@@ -7,16 +7,17 @@ from pytorch_lightning.trainer import training_tricks
 
 import torch
 import pytorch_lightning as pl
-import litModel
+# import litModel
 import yaml
 import time
-from litModel import BertLitModel
+from lit_models import BertLitModel
 from transformers import AutoConfig,AutoModel
 from pytorch_lightning.plugins import DDPPlugin
 import os
+import model
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def _import_class(module_and_class_name:str)->type:
+def _import_class(module_and_class_name)->type:
     module_name,class_name = module_and_class_name.rsplit(".",1)
     module = importlib.import_module(module_name)
     class_ = getattr(module,class_name)
@@ -72,7 +73,7 @@ def main():
     pl.seed_everything(args.seed)
 
     data_class = _import_class(f"data.{args.data_class}")
-    model_class = _import_class(f"models.{args.model_class}")
+    model_class = _import_class(f"model.{args.model_class}")
     litmodel_class = _import_class(f"lit_models.{args.litmodel_class}")
 
     config = AutoConfig.from_pretrained(args.model_name_or_path)
@@ -112,3 +113,7 @@ def main():
     # trainer.tune(lit_model, datamodule=data)  # If passing --auto_lr_find, this will set learning rate
 
     trainer.fit(lit_model, datamodule=data)
+
+
+if __name__ == "__main__":
+    main()

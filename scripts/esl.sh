@@ -1,0 +1,12 @@
+CUDA_VISIBLE_DEVICE=0 python main.py --max_epochs=20  --num_workers=8 \
+    --model_name_or_path bert-base-uncased \
+    --accumulate_grad_batches 3 \
+    --batch_size 8 \
+    --data_dir dataset/EventStoryLine \
+    --check_val_every_n_epoch 1 \
+    --data_class ESL \
+    --max_seq_length 512 \
+    --model_class BertForMaskedLM \
+    --litmodel_class BertLitModel \
+    --task_name normal \
+    --lr 5e-5
