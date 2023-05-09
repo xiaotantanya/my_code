@@ -5,6 +5,11 @@ import random
 import time
 from tqdm import tqdm
 import spacy
+from typing import List
+from transformers import AutoTokenizer
+from collections import OrderedDict
+import pickle
+from torch.utils.data import TensorDataset,Dataset
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -55,7 +60,7 @@ class DataProcessor(object):
     
     def get_labels(self):
         """Gets the list of labels for this data set"""
-        raise NotImplementedError()
+        raise [0,1,2,3]
 
 class ESLProcessor(DataProcessor):
     """Processor for the Event Story Line dataset."""
@@ -226,22 +231,112 @@ class ESLProcessor(DataProcessor):
                                           ,relation_dict[(x,y)]["relation"],relation_dict[(y,z)]["relation"],relation_dict[(x,z)]["relation"]))
         
 
+class BartDataset(Dataset):
+    def __init__(self, features):
+        super().__init__()
+        self.features = features
+    
+    def __getitem__(self, idx):
+        return self.features[idx]
+    
+    def __len__(self, ):
+        return len(self.features)
+
 def convert_data_to_feature_for_bart(examples,max_seq_length,tokenizer,args,rel2id):
     """Loads a data file into a list of 'InputBatch's."""
 
     print("loadding")
+
+    instances = []
+    save_file = "./dataset/instances.pkl"
+
     for (ex_index,example) in enumerate(examples):
+        tokens = []
+        X_START = "[x_start]"
+        X_END = "[x_end]"
+        Y_START = "[y_start]"
+        Y_END = "[y_end]"
+        Z_START = "[z_start]"
+        Z_END = "[z_end]"
+
+        if ex_index%10000==0:
+            print("Writing example {} of {}".format(ex_index,len(examples)))
+        tokens = nlp(example.doc_content)
+        x_token_index = len(nlp(example.doc_content[:example.x_start_char]))
+        y_token_index = len(nlp(example.doc_content[:example.y_start_char]))
+        z_token_index = len(nlp(example.doc_content[:example.z_start_char]))
+
+        append_tokens = []
+        for i,token in enumerate(tokens):
+            if i == x_token_index:
+                append_tokens.append(X_START)
+            if i == y_token_index:
+                append_tokens.append(Y_START)
+            if i == z_token_index:
+                append_tokens.append(Z_START)    
+            append_tokens.append(str(token))
+            if i == x_token_index:
+                append_tokens.append(X_END)
+            if i == y_token_index:
+                append_tokens.append(Y_END)
+            if i == z_token_index:
+                append_tokens.append(Z_END)
+        #append prompt
+        prompt = f"{example.x_mention} {tokenizer.mask_token} {example.y_mention} {tokenizer.mask_token} {example.z_mention} {tokenizer.mask_token} {example.x_mention}"
         
 
-        tokens = []
-        SUBJECT_START = "[subject_start]"
-        SUBJECT_END = "[subject_end]"
-        OBJECT_START = "[object_start]"
-        OBJECT_END = "[object_end]"
+        if ex_index == 0:
+            input_text = " ".join(append_tokens)
+            print(f"input text : {input_text}")
+            print(f"prompt : {prompt}" )
+            print(f"xy_label : {example.xy_label} yz_label : {example.yz_label} xz_label : {example.xz_label}")
+        inputs = tokenizer(
+            prompt,
+            " ".join(append_tokens),
+            truncation = "longest_first",
+            max_length = max_seq_length,
+            padding = "max_length",
+            add_special_tokens = True
+        )
 
+        # num_tokens += sum(inputs["attention_mask"])
+
+        if sum(inputs["attention_mask"]) > max_seq_length:
+            pass
+        
+        x = OrderedDict()
+        x["input_ids"] = inputs["input_ids"]
+        x["attention_mask"] = inputs["attention_mask"]
+        x["xy_label"] = example.xy_label
+        x["yz_label"] = example.yz_label
+        x["xz_label"] = example.xz_label
+        x["labels"] = {0:"SuperSub",1:"SubSuper",2:"Coref",3:"NoRef"}
+        instances.append(x)
     
-def get_dataset():
-    pass
+    with open(file = save_file,mode="wb") as fw:
+        pickle.dump(instances,fw)
+    print("Finish save preprocessed data to {}".format(save_file))
+
+    dataset = BartDataset(instances)
+
+    return dataset
+
+
+def get_dataset(mode,args,tokenizer,processor):
+    examples = []
+    if mode == "train":
+        examples = processor.get_train_examples()
+    elif mode == "dev":
+        examples = processor.get_dev_examples()
+    elif mode == "test":
+        examples = processor.get_test_examples()
+    else:
+        raise Exception("mode must be in choice [train,dev,test]")
+    
+    dataset = convert_data_to_feature_for_bart(examples,args.max_seq_length,tokenizer,args,processor.get_labels())
+
+    return dataset
+
 
 processors = {"ESL":ESLProcessor}
 
@@ -249,6 +344,10 @@ if __name__ == "__main__":
     processor = ESLProcessor(True,0.1,"./dataset/EventStoryLine/")
     processor.get_train_examples()
     processor.get_dev_examples()
-    processor.get_test_examples()
-    print("complete!")
+    test = processor.get_test_examples()
+    convert_data_to_feature_for_bart(test,512,AutoTokenizer.from_pretrained("bert-base-uncased"),None,None)
+    # for example in test:
+    #     print(example.x_mention,example.y_mention,example.z_mention,example.xy_label,example.yz_label,example.xz_label)
+    # print(len(test))
+    # print("complete!")
 
